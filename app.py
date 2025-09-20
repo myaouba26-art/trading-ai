@@ -1,61 +1,48 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from binance.client import Client
+from pycoingecko import CoinGeckoAPI
 
-# Initialisation du client Binance (clé API pas obligatoire pour les données publiques)
-client = Client()
+st.title("📊 Analyse Crypto avec CoinGecko (Données Réelles)")
 
-# Titre de l'application
-st.title("📊 Application de Trading IA (Données Binance)")
+# Initialiser client CoinGecko
+cg = CoinGeckoAPI()
 
-# Choix de la crypto et des paramètres
-symbol = st.text_input("Symbole (ex: BTCUSDT, ETHUSDT, BNBUSDT)", "ETHUSDT")
-interval = st.selectbox("Intervalle", ["1m","5m","15m","30m","1h","1d"])
-limit = st.slider("Nombre de bougies à récupérer", 50, 500, 100)
+# Sélection de la crypto
+crypto = st.text_input("Symbole (ex: bitcoin, ethereum, cardano)", "bitcoin")
 
-st.write(f"Téléchargement de {symbol} — intervalle: {interval} — {limit} bougies")
+# Intervalle (jours)
+jours = st.slider("Nombre de jours d'historique", 1, 30, 7)
 
+# Télécharger données
 try:
-    # Récupération des bougies depuis Binance
-    klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
+    data = cg.get_coin_market_chart_by_id(id=crypto, vs_currency="usd", days=jours, interval="hourly")
+    prix = [p[1] for p in data["prices"]]
+    temps = pd.to_datetime([p[0] for p in data["prices"]], unit="ms")
 
-    # Conversion en DataFrame
-    df = pd.DataFrame(klines, columns=[
-        "Open time","Open","High","Low","Close","Volume",
-        "Close time","Quote asset volume","Number of trades",
-        "Taker buy base","Taker buy quote","Ignore"
-    ])
-    df["Close"] = pd.to_numeric(df["Close"])
-    df["Open"] = pd.to_numeric(df["Open"])
-    df["High"] = pd.to_numeric(df["High"])
-    df["Low"] = pd.to_numeric(df["Low"])
+    df = pd.DataFrame({"Date": temps, "Prix": prix})
+    df.set_index("Date", inplace=True)
 
-    # Calcul RSI
-    delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=14).mean()
-    avg_loss = loss.rolling(window=14).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    df["RSI"] = rsi
+    st.line_chart(df["Prix"])
 
-    # Calcul EMA 20
-    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
+    # RSI simple
+    delta = df["Prix"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    RS = gain / loss
+    RSI = 100 - (100 / (1 + RS))
 
-    # Score fondamental fictif
-    fundamental_score = np.random.randint(40, 90)
+    st.subheader("RSI (14)")
+    st.line_chart(RSI)
 
-    # 📈 Affichage des graphiques
-    st.subheader("Cours et EMA20")
-    st.line_chart(df[["Close","EMA20"]])
-
-    st.subheader("RSI")
-    st.line_chart(df["RSI"])
-
-    # 📊 Indicateur fondamental fictif
-    st.metric("Score fondamental (fictif)", fundamental_score)
+    # Signal simple
+    dernier_RSI = RSI.iloc[-1]
+    if dernier_RSI > 70:
+        st.error("⚠️ Surachat → Signal de Vente")
+    elif dernier_RSI < 30:
+        st.success("✅ Survente → Signal d'Achat")
+    else:
+        st.info("⏸ Attente → Pas de signal clair")
 
 except Exception as e:
-    st.error(f"❌ Erreur lors du téléchargement des données : {e}")
+    st.error(f"Erreur : {e}")
