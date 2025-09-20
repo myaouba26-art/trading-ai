@@ -1,53 +1,48 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from binance.client import Client
+import yfinance as yf
 from alpha_vantage.foreignexchange import ForeignExchange
 
 # =====================
 # CONFIG
 # =====================
-API_KEY = "F91C9ZG3PRF68UUV"  # Clé Alpha Vantage
-binance_client = Client()  
+API_KEY = "F91C9ZG3PRF68UUV"  # ta clé Alpha Vantage
 fx = ForeignExchange(key=API_KEY)
 
 # =====================
-# INTERFACE STREAMLIT
+# INTERFACE
 # =====================
 st.title("📊 Quotex Style - Crypto & Forex")
 
 mode = st.selectbox("Choisissez le marché :", ["Crypto", "Forex"])
 
+# ===== CRYPTO =====
 if mode == "Crypto":
-    crypto = st.selectbox("Choisissez une crypto :", ["BTCUSDT", "ETHUSDT", "BNBUSDT"])
+    crypto = st.selectbox("Choisissez une crypto :", ["BTC-USD", "ETH-USD", "BNB-USD"])
 
-    # Récupérer prix actuel Binance
-    ticker = binance_client.get_symbol_ticker(symbol=crypto)
-    price = float(ticker["price"])
-    st.success(f"💰 Prix actuel de {crypto} : {price:.2f} USDT")
+    data = yf.download(crypto, period="1d", interval="1m")
+    if not data.empty:
+        last_price = data["Close"].iloc[-1]
+        st.success(f"💰 Prix actuel de {crypto} : {last_price:.2f} USD")
 
-    # Données bougies
-    klines = binance_client.get_klines(symbol=crypto, interval=Client.KLINE_INTERVAL_1MINUTE, limit=30)
-    df = pd.DataFrame(klines, columns=["time","o","h","l","c","v","close_time","q","n","tb","tq","ignore"])
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
-    df["c"] = df["c"].astype(float)
+        fig, ax = plt.subplots()
+        ax.plot(data.index, data["Close"], label="Prix")
+        ax.set_title(f"Évolution de {crypto}")
+        ax.legend()
+        st.pyplot(fig)
+    else:
+        st.error("Impossible de récupérer les données crypto.")
 
-    # Graphique
-    fig, ax = plt.subplots()
-    ax.plot(df["time"], df["c"], label="Prix")
-    ax.set_title(f"Évolution de {crypto}")
-    ax.legend()
-    st.pyplot(fig)
-
+# ===== FOREX =====
 elif mode == "Forex":
     pair = st.selectbox("Choisissez une paire Forex :", ["EUR/USD", "GBP/USD", "USD/JPY"])
-
-    # Récupérer données Alpha Vantage
     from_symbol, to_symbol = pair.split("/")
+
     data, _ = fx.get_currency_exchange_intraday(
-        from_symbol=from_symbol, 
-        to_symbol=to_symbol, 
-        interval="1min", 
+        from_symbol=from_symbol,
+        to_symbol=to_symbol,
+        interval="1min",
         outputsize="compact"
     )
 
@@ -63,7 +58,6 @@ elif mode == "Forex":
 
     st.success(f"💰 Dernier prix {pair} : {df['close'].iloc[-1]:.5f}")
 
-    # Graphique
     fig, ax = plt.subplots()
     ax.plot(df.index, df["close"], label="Prix Forex")
     ax.set_title(f"Évolution de {pair}")
