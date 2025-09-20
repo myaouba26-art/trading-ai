@@ -1,44 +1,61 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import numpy as np
+from binance.client import Client
 
-st.title("Mon Application de Trading IA (Données Réelles)")
+# Initialisation du client Binance (clé API pas obligatoire pour les données publiques)
+client = Client()
 
-# Entrées utilisateur
-symbol = st.text_input("Symbole (ex: BTC-USD, ETH-USD, AAPL, EURUSD=X)", "ETH-USD")
+# Titre de l'application
+st.title("📊 Application de Trading IA (Données Binance)")
+
+# Choix de la crypto et des paramètres
+symbol = st.text_input("Symbole (ex: BTCUSDT, ETHUSDT, BNBUSDT)", "ETHUSDT")
 interval = st.selectbox("Intervalle", ["1m","5m","15m","30m","1h","1d"])
-period = st.selectbox("Période", ["1d","5d","7d","1mo","3mo","6mo","1y"])
+limit = st.slider("Nombre de bougies à récupérer", 50, 500, 100)
 
-st.write(f"Téléchargement de {symbol} — interval: {interval} — period: {period}")
+st.write(f"Téléchargement de {symbol} — intervalle: {interval} — {limit} bougies")
 
 try:
-    data = yf.download(tickers=symbol, interval=interval, period=period)
-    if data.empty:
-        st.error("⚠️ Pas de données disponibles pour ce symbole / intervalle / période.")
-    else:
-        st.line_chart(data["Close"])
+    # Récupération des bougies depuis Binance
+    klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
 
-        # === Calcul RSI ===
-        delta = data["Close"].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        avg_gain = gain.rolling(window=14).mean()
-        avg_loss = loss.rolling(window=14).mean()
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        data["RSI"] = rsi
+    # Conversion en DataFrame
+    df = pd.DataFrame(klines, columns=[
+        "Open time","Open","High","Low","Close","Volume",
+        "Close time","Quote asset volume","Number of trades",
+        "Taker buy base","Taker buy quote","Ignore"
+    ])
+    df["Close"] = pd.to_numeric(df["Close"])
+    df["Open"] = pd.to_numeric(df["Open"])
+    df["High"] = pd.to_numeric(df["High"])
+    df["Low"] = pd.to_numeric(df["Low"])
 
-        # === Calcul EMA (20) ===
-        data["EMA20"] = data["Close"].ewm(span=20, adjust=False).mean()
+    # Calcul RSI
+    delta = df["Close"].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(window=14).mean()
+    avg_loss = loss.rolling(window=14).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    df["RSI"] = rsi
 
-        # Score fondamental fictif (aléatoire)
-        fundamental_score = np.random.randint(40, 90)
-        st.metric("Score fondamental (fictif)", fundamental_score)
+    # Calcul EMA 20
+    df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
 
-        # Affichage
-        st.line_chart(data[["Close","EMA20"]])
-        st.line_chart(data["RSI"])
+    # Score fondamental fictif
+    fundamental_score = np.random.randint(40, 90)
+
+    # 📈 Affichage des graphiques
+    st.subheader("Cours et EMA20")
+    st.line_chart(df[["Close","EMA20"]])
+
+    st.subheader("RSI")
+    st.line_chart(df["RSI"])
+
+    # 📊 Indicateur fondamental fictif
+    st.metric("Score fondamental (fictif)", fundamental_score)
 
 except Exception as e:
-    st.error(f"Erreur lors du téléchargement : {e}")
+    st.error(f"❌ Erreur lors du téléchargement des données : {e}")
