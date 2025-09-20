@@ -1,12 +1,15 @@
 import streamlit as st
-import requests
+from binance.client import Client
 import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-st.title("📊 Prix en temps réel avec graphique (Binance API)")
+# Client Binance en mode public (pas besoin de clés pour les prix spot)
+client = Client()
 
-cryptos = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "DOGEUSDT", "SOLUSDT", "XRPUSDT", "LTCUSDT"]
+st.title("📊 Prix en temps réel (Binance)")
+
+cryptos = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "DOGEUSDT"]
 crypto = st.selectbox("Choisissez une crypto :", cryptos)
 
 auto_update = st.checkbox("🔄 Mise à jour automatique (toutes les 5 secondes)")
@@ -19,13 +22,8 @@ timestamps = []
 
 def get_price(symbol):
     try:
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return float(data["price"])
-        else:
-            return None
+        ticker = client.get_symbol_ticker(symbol=symbol)
+        return float(ticker["price"])
     except Exception as e:
         return None
 
@@ -40,15 +38,14 @@ if st.button("Obtenir le prix") or auto_update:
 
             df = pd.DataFrame({"Temps": timestamps, "Prix": prices})
             fig, ax = plt.subplots()
-            ax.plot(df["Temps"], df["Prix"], marker="o", linestyle="-", color="blue")
+            ax.plot(df["Temps"], df["Prix"], marker="o", color="blue")
             ax.set_xlabel("Temps")
             ax.set_ylabel("Prix en USD")
-            ax.set_title(f"Évolution en temps réel de {crypto}")
+            ax.set_title(f"Évolution de {crypto}")
             plt.xticks(rotation=45)
             chart_placeholder.pyplot(fig)
-
         else:
-            price_placeholder.error("⚠️ Erreur de connexion à Binance")
+            price_placeholder.error("⚠️ Erreur de connexion Binance (via SDK)")
 
         if not auto_update:
             break
