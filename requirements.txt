@@ -1,6 +1,5 @@
 streamlit
 pandas
 matplotlib
-requests
-python-binance
+yfinance
 alpha_vantage
