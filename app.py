@@ -1,34 +1,38 @@
 import streamlit as st
-from binance.client import Client
-import pandas as pd
+import requests
 import time
 
-# ----------------------------
-# Binance client (API publique → pas besoin de clé pour juste les prix)
-# ----------------------------
-client = Client()
+st.title("📈 Prix en temps réel (Binance API)")
 
-st.title("📈 Suivi en temps réel (Binance)")
+# Input pour choisir la paire
+symbol = st.text_input("Entrez le symbole (ex: BTCUSDT, ETHUSDT)", "BTCUSDT").upper()
 
-# Sélection de la paire
-symbol = st.text_input("Entre le symbole (ex: BTCUSDT, ETHUSDT)", "BTCUSDT")
-
-# Bouton pour lancer
-if st.button("Obtenir le prix"):
+# Fonction pour récupérer le prix
+def get_binance_price(symbol):
+    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
     try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        st.success(f"💰 Prix actuel de {symbol} : {ticker['price']} USDT")
-    except Exception as e:
-        st.error(f"Erreur : {e}")
+        response = requests.get(url)
+        data = response.json()
+        return data["price"]
+    except:
+        return None
+
+# Affichage du prix
+if st.button("Obtenir le prix"):
+    price = get_binance_price(symbol)
+    if price:
+        st.success(f"💰 Prix actuel de {symbol} : {price} USDT")
+    else:
+        st.error("Erreur lors de la récupération du prix")
 
 # Mise à jour automatique toutes les 5 secondes
 st.write("🔄 Mise à jour automatique (toutes les 5 secondes)")
 placeholder = st.empty()
 
 for i in range(10):  # rafraîchit 10 fois
-    try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        placeholder.metric(label=f"Prix {symbol}", value=f"{ticker['price']} USDT")
-    except:
+    price = get_binance_price(symbol)
+    if price:
+        placeholder.metric(label=f"Prix {symbol}", value=f"{price} USDT")
+    else:
         placeholder.error("Erreur de connexion à Binance")
     time.sleep(5)
