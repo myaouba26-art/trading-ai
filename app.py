@@ -11,12 +11,12 @@ cg = CoinGeckoAPI()
 # Sélection de la crypto
 crypto = st.text_input("Symbole (ex: bitcoin, ethereum, cardano)", "bitcoin")
 
-# Intervalle (jours)
+# Intervalle en jours
 jours = st.slider("Nombre de jours d'historique", 1, 30, 7)
 
-# Télécharger données
+# Télécharger données (sans interval)
 try:
-    data = cg.get_coin_market_chart_by_id(id=crypto, vs_currency="usd", days=jours, interval="hourly")
+    data = cg.get_coin_market_chart_by_id(id=crypto, vs_currency="usd", days=jours)
     prix = [p[1] for p in data["prices"]]
     temps = pd.to_datetime([p[0] for p in data["prices"]], unit="ms")
 
