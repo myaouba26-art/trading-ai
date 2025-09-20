@@ -1,16 +1,21 @@
 import streamlit as st
-from binance.client import Client
+from pycoingecko import CoinGeckoAPI
 import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Client Binance en mode public (pas besoin de clés pour les prix spot)
-client = Client()
+cg = CoinGeckoAPI()
 
-st.title("📊 Prix en temps réel (Binance)")
+st.title("📊 Prix en temps réel (CoinGecko API)")
 
-cryptos = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "DOGEUSDT"]
-crypto = st.selectbox("Choisissez une crypto :", cryptos)
+cryptos = {
+    "Bitcoin": "bitcoin",
+    "Ethereum": "ethereum",
+    "Cardano": "cardano",
+    "Dogecoin": "dogecoin"
+}
+
+crypto = st.selectbox("Choisissez une crypto :", list(cryptos.keys()))
 
 auto_update = st.checkbox("🔄 Mise à jour automatique (toutes les 5 secondes)")
 
@@ -20,16 +25,16 @@ chart_placeholder = st.empty()
 prices = []
 timestamps = []
 
-def get_price(symbol):
+def get_price(crypto_id):
     try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        return float(ticker["price"])
-    except Exception as e:
+        data = cg.get_price(ids=crypto_id, vs_currencies="usd")
+        return data[crypto_id]["usd"]
+    except:
         return None
 
 if st.button("Obtenir le prix") or auto_update:
     while True:
-        price = get_price(crypto)
+        price = get_price(cryptos[crypto])
         if price:
             prices.append(price)
             timestamps.append(time.strftime("%H:%M:%S"))
@@ -45,7 +50,7 @@ if st.button("Obtenir le prix") or auto_update:
             plt.xticks(rotation=45)
             chart_placeholder.pyplot(fig)
         else:
-            price_placeholder.error("⚠️ Erreur de connexion Binance (via SDK)")
+            price_placeholder.error("⚠️ Erreur de connexion CoinGecko")
 
         if not auto_update:
             break
