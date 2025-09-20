@@ -1,1 +1,5 @@
-pycoingecko
+streamlit
+requests
+matplotlib
+pandas
+ta
