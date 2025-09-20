@@ -1,1 +1,5 @@
-quotexpy
+streamlit
+pandas
+numpy
+matplotlib
+python-binance
