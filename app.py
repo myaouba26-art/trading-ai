@@ -1,59 +1,71 @@
 import streamlit as st
-import requests
 import pandas as pd
-import datetime
 import matplotlib.pyplot as plt
+from binance.client import Client
+from alpha_vantage.foreignexchange import ForeignExchange
 
-st.title("📊 Crypto Trading avec RSI + EMA + Probabilité")
+# =====================
+# CONFIG
+# =====================
+API_KEY = "F91C9ZG3PRF68UUV"  # Clé Alpha Vantage
+binance_client = Client()  
+fx = ForeignExchange(key=API_KEY)
 
-# Sélection crypto et devise
-crypto = st.selectbox("Choisissez une crypto :", ["bitcoin", "ethereum", "solana"])
-devise = st.selectbox("Devise :", ["usd", "eur", "usdt"])
+# =====================
+# INTERFACE STREAMLIT
+# =====================
+st.title("📊 Quotex Style - Crypto & Forex")
 
-if st.button("Obtenir les données"):
-    try:
-        # ✅ On récupère uniquement le prix actuel
-        url = "https://api.coingecko.com/api/v3/simple/price"
-        params = {"ids": crypto, "vs_currencies": devise}
-        response = requests.get(url, params=params)
-        data = response.json()
+mode = st.selectbox("Choisissez le marché :", ["Crypto", "Forex"])
 
-        if crypto in data:
-            prix = data[crypto][devise]
-            st.success(f"💰 Prix actuel de {crypto.capitalize()} : {prix} {devise.upper()}")
+if mode == "Crypto":
+    crypto = st.selectbox("Choisissez une crypto :", ["BTCUSDT", "ETHUSDT", "BNBUSDT"])
 
-            # 🔹 Simuler un petit historique (pour RSI & EMA provisoires)
-            dates = [datetime.datetime.now() - datetime.timedelta(minutes=i) for i in range(30)]
-            prix_fake = [prix * (1 + (0.01 * (i % 5 - 2))) for i in range(30)]  # petites variations simulées
+    # Récupérer prix actuel Binance
+    ticker = binance_client.get_symbol_ticker(symbol=crypto)
+    price = float(ticker["price"])
+    st.success(f"💰 Prix actuel de {crypto} : {price:.2f} USDT")
 
-            df = pd.DataFrame({"date": dates[::-1], "prix": prix_fake[::-1]})
+    # Données bougies
+    klines = binance_client.get_klines(symbol=crypto, interval=Client.KLINE_INTERVAL_1MINUTE, limit=30)
+    df = pd.DataFrame(klines, columns=["time","o","h","l","c","v","close_time","q","n","tb","tq","ignore"])
+    df["time"] = pd.to_datetime(df["time"], unit="ms")
+    df["c"] = df["c"].astype(float)
 
-            # Calcul RSI (simplifié)
-            delta = df["prix"].diff()
-            gain = delta.clip(lower=0).mean()
-            loss = -delta.clip(upper=0).mean()
-            rs = gain / loss if loss != 0 else 0
-            rsi = 100 - (100 / (1 + rs))
+    # Graphique
+    fig, ax = plt.subplots()
+    ax.plot(df["time"], df["c"], label="Prix")
+    ax.set_title(f"Évolution de {crypto}")
+    ax.legend()
+    st.pyplot(fig)
 
-            # Calcul EMA
-            ema = df["prix"].ewm(span=14, adjust=False).mean()
+elif mode == "Forex":
+    pair = st.selectbox("Choisissez une paire Forex :", ["EUR/USD", "GBP/USD", "USD/JPY"])
 
-            # Afficher graphiques
-            st.line_chart(df.set_index("date")["prix"])
-            st.line_chart(ema)
+    # Récupérer données Alpha Vantage
+    from_symbol, to_symbol = pair.split("/")
+    data, _ = fx.get_currency_exchange_intraday(
+        from_symbol=from_symbol, 
+        to_symbol=to_symbol, 
+        interval="1min", 
+        outputsize="compact"
+    )
 
-            # Probabilité fictive basée sur RSI
-            if rsi > 70:
-                decision = "📉 Surachat → Probabilité forte de baisse"
-            elif rsi < 30:
-                decision = "📈 Survente → Probabilité forte de hausse"
-            else:
-                decision = "⏸ Attente → Marché neutre"
+    df = pd.DataFrame.from_dict(data, orient="index")
+    df = df.rename(columns={
+        "1. open": "open",
+        "2. high": "high",
+        "3. low": "low",
+        "4. close": "close"
+    })
+    df.index = pd.to_datetime(df.index)
+    df = df.astype(float).sort_index()
 
-            st.info(f"RSI actuel : {rsi:.2f} → {decision}")
+    st.success(f"💰 Dernier prix {pair} : {df['close'].iloc[-1]:.5f}")
 
-        else:
-            st.error("❌ Erreur : Crypto non trouvée dans CoinGecko")
-
-    except Exception as e:
-        st.error(f"🚨 Erreur de connexion à CoinGecko : {e}")
+    # Graphique
+    fig, ax = plt.subplots()
+    ax.plot(df.index, df["close"], label="Prix Forex")
+    ax.set_title(f"Évolution de {pair}")
+    ax.legend()
+    st.pyplot(fig)
