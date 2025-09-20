@@ -1,4 +1,6 @@
 streamlit
-requests
 pandas
 matplotlib
+requests
+python-binance
+alpha_vantage
