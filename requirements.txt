@@ -1,5 +1,4 @@
 streamlit
 pandas
-matplotlib
-yfinance
-alpha_vantage
+requests
+plotly
