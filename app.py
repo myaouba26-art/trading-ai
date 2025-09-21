@@ -1,80 +1,82 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-import requests
+import plotly.graph_objects as go
 
-# ----------------------------
-# Fonction pour Alpha Vantage
-# ----------------------------
-def get_alpha_vantage_data(market, pair, interval):
-    api_key = st.secrets["ALPHAVANTAGE_API_KEY"]
+st.title("(Crypto / Forex / Actions) Trading App")
 
-    # Nettoyer la paire (BTC/USD -> BTCUSD)
-    pair_clean = pair.replace("/", "").upper()
-
-    # Choisir le bon endpoint selon le marché
-    if market == "Crypto":
-        function = "CRYPTO_INTRADAY"
-        symbol = pair_clean
-        market_param = "USD"
-        url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&market={market_param}&interval={interval}&apikey={api_key}"
-
-    elif market == "Forex":
-        function = "FX_INTRADAY"
-        from_symbol, to_symbol = pair.upper().split("/")
-        url = f"https://www.alphavantage.co/query?function={function}&from_symbol={from_symbol}&to_symbol={to_symbol}&interval={interval}&apikey={api_key}"
-
-    elif market == "Actions":
-        function = "TIME_SERIES_INTRADAY"
-        symbol = pair_clean
-        url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&interval={interval}&apikey={api_key}"
-
-    else:
-        st.error("❌ Marché non reconnu")
-        return None
-
-    # Requête
-    response = requests.get(url)
-    data = response.json()
-
-    # Vérifier si les données existent
-    if "Time Series" not in str(data):
-        st.warning("⚠️ Pas de données disponibles pour cette combinaison.")
-        return None
-
-    # Trouver la clé correcte
-    for key in data.keys():
-        if "Time Series" in key:
-            ts_key = key
-            break
-
-    df = pd.DataFrame(data[ts_key]).T
-    df = df.rename(columns={
-        '1. open': 'Open',
-        '2. high': 'High',
-        '3. low': 'Low',
-        '4. close': 'Close',
-        '5. volume': 'Volume'
-    })
-    df.index = pd.to_datetime(df.index)
-    df = df.astype(float)
-
-    return df
-
-
-# ----------------------------
-# Interface Streamlit
-# ----------------------------
-st.title("(Crypto / Forex / Actions)")
-
-# Sélecteurs utilisateur
+# === Choix du marché ===
 market = st.selectbox("Choisissez le marché :", ["Crypto", "Forex", "Actions"])
-pair = st.text_input("Entrez la paire ou l’action :", "BTC/USD")
-interval = st.selectbox("Intervalle :", ["1min", "5min", "15min", "30min", "60min"])
 
+# === Choix de la paire / action selon le marché ===
+if market == "Crypto":
+    pair = st.selectbox("Choisissez une paire Crypto :", [
+        "BTC-USD",
+        "ETH-USD",
+        "LTC-USD",
+        "ADA-USD",
+        "BNB-USD",
+        "XRP-USD",
+        "SOL-USD",
+        "DOGE-USD"
+    ])
+
+elif market == "Forex":
+    pair = st.selectbox("Choisissez une paire Forex :", [
+        "EURUSD=X",
+        "GBPUSD=X",
+        "USDJPY=X",
+        "USDCHF=X",
+        "AUDUSD=X",
+        "NZDUSD=X",
+        "USDCAD=X"
+    ])
+
+elif market == "Actions":
+    pair = st.selectbox("Choisissez une action :", [
+        "AAPL",   # Apple
+        "TSLA",   # Tesla
+        "MSFT",   # Microsoft
+        "GOOGL",  # Alphabet
+        "AMZN",   # Amazon
+        "META",   # Meta (Facebook)
+        "NVDA"    # Nvidia
+    ])
+
+# === Choix de l’intervalle ===
+interval = st.selectbox("Intervalle :", ["1m", "5m", "15m", "30m", "1h", "1d"])
+
+# === Bouton pour récupérer les données ===
 if st.button("Obtenir les données"):
-    df = get_alpha_vantage_data(market, pair, interval)
+    try:
+        df = yf.download(tickers=pair, period="1d", interval=interval)
 
-    if df is not None:
-        st.success("✅ Données récupérées avec succès !")
-        st.write(df.head())  # affichage brut
-        st.line_chart(df["Close"])  # graphique simple
+        if df.empty:
+            st.warning("⚠️ Pas de données disponibles pour cette combinaison.")
+        else:
+            st.success("✅ Données récupérées avec succès !")
+
+            # === Affichage du graphique ===
+            fig = go.Figure(data=[go.Candlestick(
+                x=df.index,
+                open=df['Open'],
+                high=df['High'],
+                low=df['Low'],
+                close=df['Close']
+            )])
+
+            fig.update_layout(title=f"Cours de {pair}", xaxis_title="Temps", yaxis_title="Prix")
+            st.plotly_chart(fig)
+
+            # === Calcul RSI (exemple simple) ===
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            df['RSI'] = rsi
+
+            st.line_chart(df['RSI'])
+
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la récupération des données : {e}")
