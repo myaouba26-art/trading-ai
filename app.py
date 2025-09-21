@@ -1,7 +1,10 @@
-import requests
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import requests
 
+# ----------------------------
+# Fonction pour Alpha Vantage
+# ----------------------------
 def get_alpha_vantage_data(market, pair, interval):
     api_key = st.secrets["ALPHAVANTAGE_API_KEY"]
 
@@ -12,12 +15,11 @@ def get_alpha_vantage_data(market, pair, interval):
     if market == "Crypto":
         function = "CRYPTO_INTRADAY"
         symbol = pair_clean
-        market_param = "USD"  # par défaut en dollars
+        market_param = "USD"
         url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&market={market_param}&interval={interval}&apikey={api_key}"
 
     elif market == "Forex":
         function = "FX_INTRADAY"
-        # Exemple EUR/USD -> from_symbol=EUR, to_symbol=USD
         from_symbol, to_symbol = pair.upper().split("/")
         url = f"https://www.alphavantage.co/query?function={function}&from_symbol={from_symbol}&to_symbol={to_symbol}&interval={interval}&apikey={api_key}"
 
@@ -30,7 +32,7 @@ def get_alpha_vantage_data(market, pair, interval):
         st.error("❌ Marché non reconnu")
         return None
 
-    # Récupérer les données
+    # Requête
     response = requests.get(url)
     data = response.json()
 
@@ -39,7 +41,7 @@ def get_alpha_vantage_data(market, pair, interval):
         st.warning("⚠️ Pas de données disponibles pour cette combinaison.")
         return None
 
-    # Trouver la bonne clé (varie selon fonction)
+    # Trouver la clé correcte
     for key in data.keys():
         if "Time Series" in key:
             ts_key = key
@@ -57,3 +59,22 @@ def get_alpha_vantage_data(market, pair, interval):
     df = df.astype(float)
 
     return df
+
+
+# ----------------------------
+# Interface Streamlit
+# ----------------------------
+st.title("(Crypto / Forex / Actions)")
+
+# Sélecteurs utilisateur
+market = st.selectbox("Choisissez le marché :", ["Crypto", "Forex", "Actions"])
+pair = st.text_input("Entrez la paire ou l’action :", "BTC/USD")
+interval = st.selectbox("Intervalle :", ["1min", "5min", "15min", "30min", "60min"])
+
+if st.button("Obtenir les données"):
+    df = get_alpha_vantage_data(market, pair, interval)
+
+    if df is not None:
+        st.success("✅ Données récupérées avec succès !")
+        st.write(df.head())  # affichage brut
+        st.line_chart(df["Close"])  # graphique simple
