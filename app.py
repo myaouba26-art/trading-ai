@@ -1,12 +1,10 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime
 
 API_KEY = st.secrets["ALPHAVANTAGE_API_KEY"]
 
-# 📌 Fonction avec cache pour limiter les appels API
-@st.cache_data(ttl=300)  # garde les données en cache 5 minutes (300 sec)
+@st.cache_data(ttl=300)
 def get_alpha_vantage_data(market, symbol, interval):
     if market == "Crypto":
         function = "CRYPTO_INTRADAY"
@@ -22,28 +20,34 @@ def get_alpha_vantage_data(market, symbol, interval):
     r = requests.get(url)
     data = r.json()
 
-    # Vérifier erreurs API
-    if "Error Message" in data or "Note" in data:
-        return None
-    
-    # Récupérer les données
-    key = [k for k in data.keys() if "Time Series" in k][0]
+    # Vérifier si Alpha Vantage renvoie une erreur ou un quota dépassé
+    if "Error Message" in data:
+        return None, "❌ Erreur dans la requête (mauvais symbole ou fonction)."
+    if "Note" in data:
+        return None, "⚠️ Quota dépassé (attendez 1 minute)."
+
+    # Trouver la clé "Time Series"
+    time_series_keys = [k for k in data.keys() if "Time Series" in k]
+    if not time_series_keys:
+        return None, "⚠️ Pas de données disponibles pour cette combinaison."
+
+    key = time_series_keys[0]
     df = pd.DataFrame.from_dict(data[key], orient="index")
     df = df.astype(float)
     df.index = pd.to_datetime(df.index)
-    return df.sort_index()
+    return df.sort_index(), None
 
 # --- Interface ---
-st.title("📊 Alpha Vantage (avec cache)")
+st.title("📊 Alpha Vantage (avec cache et gestion des erreurs)")
 
 market = st.selectbox("Choisissez le marché :", ["Crypto", "Forex", "Actions"])
 symbol = st.text_input("Entrez la paire ou l’action :", "BTC/USD" if market=="Crypto" else "EUR/USD")
 interval = st.selectbox("Intervalle :", ["1min", "5min", "15min", "30min", "60min"])
 
 if st.button("Obtenir les données"):
-    df = get_alpha_vantage_data(market, symbol, interval)
-    if df is not None:
-        st.success("✅ Données récupérées (stockées en cache 5 min)")
+    df, error = get_alpha_vantage_data(market, symbol, interval)
+    if error:
+        st.error(error)
+    elif df is not None:
+        st.success("✅ Données récupérées")
         st.line_chart(df["4. close"])
-    else:
-        st.error("⚠️ Erreur de connexion ou quota dépassé")
