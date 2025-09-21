@@ -1,72 +1,59 @@
-import streamlit as st
 import requests
 import pandas as pd
-import plotly.graph_objects as go
-import os
+import streamlit as st
 
-# Récupération de la clé API depuis les secrets
-API_KEY = st.secrets["ALPHAVANTAGE_API_KEY"]
+def get_alpha_vantage_data(market, pair, interval):
+    api_key = st.secrets["ALPHAVANTAGE_API_KEY"]
 
-# Fonction pour récupérer les données
-def get_alpha_vantage_data(market, symbol, interval):
-    base_url = "https://www.alphavantage.co/query?"
+    # Nettoyer la paire (BTC/USD -> BTCUSD)
+    pair_clean = pair.replace("/", "").upper()
 
+    # Choisir le bon endpoint selon le marché
     if market == "Crypto":
         function = "CRYPTO_INTRADAY"
-        url = f"{base_url}function={function}&symbol={symbol}&market=USD&interval={interval}&apikey={API_KEY}"
-        key = f"Time Series Crypto ({interval})"
-    else:
-        function = "TIME_SERIES_INTRADAY"
-        url = f"{base_url}function={function}&symbol={symbol}&interval={interval}&apikey={API_KEY}"
-        key = f"Time Series ({interval})"
+        symbol = pair_clean
+        market_param = "USD"  # par défaut en dollars
+        url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&market={market_param}&interval={interval}&apikey={api_key}"
 
+    elif market == "Forex":
+        function = "FX_INTRADAY"
+        # Exemple EUR/USD -> from_symbol=EUR, to_symbol=USD
+        from_symbol, to_symbol = pair.upper().split("/")
+        url = f"https://www.alphavantage.co/query?function={function}&from_symbol={from_symbol}&to_symbol={to_symbol}&interval={interval}&apikey={api_key}"
+
+    elif market == "Actions":
+        function = "TIME_SERIES_INTRADAY"
+        symbol = pair_clean
+        url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&interval={interval}&apikey={api_key}"
+
+    else:
+        st.error("❌ Marché non reconnu")
+        return None
+
+    # Récupérer les données
     response = requests.get(url)
     data = response.json()
 
-    if key not in data:
+    # Vérifier si les données existent
+    if "Time Series" not in str(data):
+        st.warning("⚠️ Pas de données disponibles pour cette combinaison.")
         return None
 
-    df = pd.DataFrame.from_dict(data[key], orient="index")
+    # Trouver la bonne clé (varie selon fonction)
+    for key in data.keys():
+        if "Time Series" in key:
+            ts_key = key
+            break
+
+    df = pd.DataFrame(data[ts_key]).T
     df = df.rename(columns={
-        "1. open": "Open",
-        "2. high": "High",
-        "3. low": "Low",
-        "4. close": "Close",
-        "5. volume": "Volume"
+        '1. open': 'Open',
+        '2. high': 'High',
+        '3. low': 'Low',
+        '4. close': 'Close',
+        '5. volume': 'Volume'
     })
     df.index = pd.to_datetime(df.index)
     df = df.astype(float)
+
     return df
-
-# --- Interface Streamlit ---
-st.title("📊 Alpha Vantage (Crypto / Forex / Actions)")
-
-market = st.selectbox("Choisissez le marché :", ["Crypto", "Forex", "Actions"])
-symbol = st.text_input("Entrez la paire ou l’action :", "BTC/USD" if market == "Crypto" else "AAPL")
-
-# Intervalles selon le marché choisi
-if market == "Crypto":
-    intervals = ["5min", "15min", "30min", "60min"]
-else:
-    intervals = ["1min", "5min", "15min", "30min", "60min"]
-
-interval = st.selectbox("Intervalle :", intervals)
-
-if st.button("Obtenir les données"):
-    df = get_alpha_vantage_data(market, symbol, interval)
-
-    if df is None or df.empty:
-        st.warning("⚠️ Pas de données disponibles pour cette combinaison.")
-    else:
-        st.success(f"Données reçues pour {symbol} ({interval})")
-
-        # Affichage du graphique en chandelier
-        fig = go.Figure(data=[go.Candlestick(
-            x=df.index,
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"]
-        )])
-        fig.update_layout(title=f"Graphique {symbol} ({interval})", xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig)
